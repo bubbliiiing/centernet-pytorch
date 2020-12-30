@@ -69,9 +69,7 @@ class FPS_CenterNet(CenterNet):
         t1 = time.time()
         for _ in range(test_interval):
             with torch.no_grad():
-                a = time.time()
                 outputs = self.centernet(images)
-                print(time.time() - a)
                 if self.backbone=='hourglass':
                     outputs = [outputs[-1]["hm"].sigmoid(), outputs[-1]["wh"], outputs[-1]["reg"]]
                 outputs = decode_bbox(outputs[0],outputs[1],outputs[2],self.image_size,self.confidence,self.cuda)
