@@ -94,7 +94,6 @@ def nms(results, nms):
     # 对每一个图片进行处理
     for i in range(len(results)):
         #------------------------------------------------#
-        #   非极大抑制过程与Retinanet视频中不同
         #   具体过程可参考
         #   https://www.bilibili.com/video/BV1Lz411B7nQ
         #------------------------------------------------#
