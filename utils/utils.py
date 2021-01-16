@@ -49,38 +49,69 @@ def pool_nms(heat, kernel=3):
     return heat * keep
 
 def decode_bbox(pred_hms, pred_whs, pred_offsets, image_size, threshold, cuda, topk=100):
+    #-------------------------------------------------------------------------#
+    #   当利用512x512x3图片进行coco数据集预测的时候
+    #   h = w = 128 num_classes = 80
+    #   Hot map热力图 -> b, 80, 128, 128, 
+    #   进行热力图的非极大抑制，利用3x3的卷积对热力图进行最大值筛选
+    #   找出一定区域内，得分最大的特征点。
+    #-------------------------------------------------------------------------#
     pred_hms = pool_nms(pred_hms)
     
     b, c, output_h, output_w = pred_hms.shape
     detects = []
     for batch in range(b):
+        #-------------------------------------------------------------------------#
+        #   heat_map        128*128, num_classes    热力图
+        #   pred_wh         128*128, 2              特征点的预测宽高
+        #   pred_offset     128*128, 2              特征点的xy轴偏移情况
+        #-------------------------------------------------------------------------#
         heat_map    = pred_hms[batch].permute(1,2,0).view([-1,c])
         pred_wh     = pred_whs[batch].permute(1,2,0).view([-1,2])
         pred_offset = pred_offsets[batch].permute(1,2,0).view([-1,2])
 
         yv, xv = torch.meshgrid(torch.arange(0, output_h), torch.arange(0, output_w))
-
+        #-------------------------------------------------------------------------#
+        #   xv              128*128,    特征点的x轴坐标
+        #   yv              128*128,    特征点的y轴坐标
+        #-------------------------------------------------------------------------#
         xv, yv = xv.flatten().float(), yv.flatten().float()
         if cuda:
             xv = xv.cuda()
             yv = yv.cuda()
 
+        #-------------------------------------------------------------------------#
+        #   class_conf      128*128,    特征点的种类置信度
+        #   class_pred      128*128,    特征点的种类
+        #-------------------------------------------------------------------------#
         class_conf, class_pred = torch.max(heat_map, dim=-1)
         mask = class_conf > threshold
 
+        #-----------------------------------------#
+        #   取出得分筛选后对应的结果
+        #-----------------------------------------#
         pred_wh_mask = pred_wh[mask]
         pred_offset_mask = pred_offset[mask]
         if len(pred_wh_mask)==0:
             detects.append([])
             continue     
-        xv_mask = torch.unsqueeze(xv[mask] + pred_offset_mask[..., 0],-1)
-        yv_mask = torch.unsqueeze(yv[mask] + pred_offset_mask[..., 1],-1)
 
+        #----------------------------------------#
+        #   计算调整后预测框的中心
+        #----------------------------------------#
+        xv_mask = torch.unsqueeze(xv[mask] + pred_offset_mask[..., 0], -1)
+        yv_mask = torch.unsqueeze(yv[mask] + pred_offset_mask[..., 1], -1)
+        #----------------------------------------#
+        #   计算预测框的宽高
+        #----------------------------------------#
         half_w, half_h = pred_wh_mask[..., 0:1] / 2, pred_wh_mask[..., 1:2] / 2
+        #----------------------------------------#
+        #   获得预测框的左上角和右下角
+        #----------------------------------------#
         bboxes = torch.cat([xv_mask - half_w, yv_mask - half_h, xv_mask + half_w, yv_mask + half_h], dim=1)
         bboxes[:, [0, 2]] /= output_w
         bboxes[:, [1, 3]] /= output_h
-        detect = torch.cat([bboxes,torch.unsqueeze(class_conf[mask],-1),torch.unsqueeze(class_pred[mask],-1).float()],dim=-1)
+        detect = torch.cat([bboxes, torch.unsqueeze(class_conf[mask],-1), torch.unsqueeze(class_pred[mask],-1).float()], dim=-1)
 
         arg_sort = torch.argsort(detect[:,-2], descending=True)
         detect = detect[arg_sort]
@@ -104,9 +135,11 @@ def nms(results, nms):
         if len(unique_class) == 0:
             results.append(best_box)
             continue
-        # 对种类进行循环，
-        # 非极大抑制的作用是筛选出一定区域内属于同一种类得分最大的框，
-        # 对种类进行循环可以帮助我们对每一个类分别进行非极大抑制。
+        #-------------------------------------------------------------------#
+        #   对种类进行循环，
+        #   非极大抑制的作用是筛选出一定区域内属于同一种类得分最大的框，
+        #   对种类进行循环可以帮助我们对每一个类分别进行非极大抑制。
+        #-------------------------------------------------------------------#
         for c in unique_class:
             cls_mask = detections[:,-1] == c
 

@@ -1,16 +1,14 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
-import pdb
 import math
+import pdb
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
-from torchvision.models.utils import load_state_dict_from_url
 from torch.autograd import Variable
-
+from torchvision.models.utils import load_state_dict_from_url
 
 model_urls = {
 'resnet18': 'https://s3.amazonaws.com/pytorch/models/resnet18-5c106cde.pth',
@@ -19,7 +17,6 @@ model_urls = {
 'resnet101': 'https://s3.amazonaws.com/pytorch/models/resnet101-5d3b4d8f.pth',
 'resnet152': 'https://s3.amazonaws.com/pytorch/models/resnet152-b121ed2d.pth',
 }
-
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -59,7 +56,10 @@ class Bottleneck(nn.Module):
 
         return out
 
-
+#-----------------------------------------------------------------#
+#   使用Renset50作为主干特征提取网络，最终会获得一个
+#   16x16x2048的有效特征层
+#-----------------------------------------------------------------#
 class ResNet(nn.Module):
     def __init__(self, block, layers, num_classes=1000):
         self.inplanes = 64
@@ -73,10 +73,13 @@ class ResNet(nn.Module):
 
         # 128x128x64 -> 128x128x256
         self.layer1 = self._make_layer(block, 64, layers[0])
+
         # 128x128x256 -> 64x64x512
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+
         # 64x64x512 -> 32x32x1024
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)  
+
         # 32x32x1024 -> 16x16x2048
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         
@@ -141,10 +144,14 @@ class resnet50_Decoder(nn.Module):
     def __init__(self, inplanes, bn_momentum=0.1):
         super(resnet50_Decoder, self).__init__()
         self.bn_momentum = bn_momentum
-        # backbone output: [b, 2048, _h, _w]
         self.inplanes = inplanes
         self.deconv_with_bias = False
         
+        #----------------------------------------------------------#
+        #   16,16,2048 -> 32,32,256 -> 64,64,128 -> 128,128,64
+        #   利用ConvTranspose2d进行上采样。
+        #   每次特征层的宽高变为原来的两倍。
+        #----------------------------------------------------------#
         self.deconv_layers = self._make_deconv_layer(
             num_layers=3,
             num_filters=[256, 128, 64],
@@ -153,9 +160,6 @@ class resnet50_Decoder(nn.Module):
 
     def _make_deconv_layer(self, num_layers, num_filters, num_kernels):
         layers = []
-        # 16,16,2048 -> 32,32,256
-        # 32,32,256 -> 64,64,128
-        # 64,64,128 -> 128,128,64
         for i in range(num_layers):
             kernel = num_kernels[i]
             planes = num_filters[i]
@@ -181,6 +185,12 @@ class resnet50_Decoder(nn.Module):
 class resnet50_Head(nn.Module):
     def __init__(self, num_classes=80, channel=64, bn_momentum=0.1):
         super(resnet50_Head, self).__init__()
+        #-----------------------------------------------------------------#
+        #   对获取到的特征进行上采样，进行分类预测和回归预测
+        #   128, 128, 64 -> 128, 128, 64 -> 128, 128, num_classes
+        #                -> 128, 128, 64 -> 128, 128, 2
+        #                -> 128, 128, 64 -> 128, 128, 2
+        #-----------------------------------------------------------------#
         # 热力图预测部分
         self.cls_head = nn.Sequential(
             nn.Conv2d(64, channel,

@@ -1,16 +1,19 @@
+import math
 from random import shuffle
+
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
-import math
 import torch.nn.functional as F
+from matplotlib.colors import hsv_to_rgb, rgb_to_hsv
 from PIL import Image
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
-from matplotlib.colors import rgb_to_hsv, hsv_to_rgb
-from utils.utils import gaussian_radius, draw_gaussian
-import cv2
+
+from utils.utils import draw_gaussian, gaussian_radius
+
 
 def preprocess_image(image):
     mean = [0.40789655, 0.44719303, 0.47026116]
@@ -21,13 +24,14 @@ def rand(a=0, b=1):
     return np.random.rand()*(b-a) + a
 
 class CenternetDataset(Dataset):
-    def __init__(self, train_lines, input_size, num_classes):
+    def __init__(self, train_lines, input_size, num_classes, is_train):
         super(CenternetDataset, self).__init__()
 
         self.train_lines = train_lines
         self.input_size = input_size
         self.output_size = (int(input_size[0]/4) , int(input_size[1]/4))
         self.num_classes = num_classes
+        self.is_train = is_train
 
     def __len__(self):
         return len(self.train_lines)
@@ -35,13 +39,43 @@ class CenternetDataset(Dataset):
     def rand(self, a=0, b=1):
         return np.random.rand() * (b - a) + a
 
-    def get_random_data(self, annotation_line, input_shape, random=True, jitter=.3, hue=.1, sat=1.5, val=1.5, proc_img=True):
+    def get_random_data(self, annotation_line, input_shape, jitter=.3, hue=.1, sat=1.5, val=1.5, random=True):
         '''r实时数据增强的随机预处理'''
         line = annotation_line.split()
         image = Image.open(line[0])
         iw, ih = image.size
         h, w = input_shape
         box = np.array([np.array(list(map(int,box.split(',')))) for box in line[1:]])
+
+        if not random:
+            # resize image
+            scale = min(w/iw, h/ih)
+            nw = int(iw*scale)
+            nh = int(ih*scale)
+            dx = (w-nw)//2
+            dy = (h-nh)//2
+
+            image = image.resize((nw,nh), Image.BICUBIC)
+            new_image = Image.new('RGB', (w,h), (128,128,128))
+            new_image.paste(image, (dx, dy))
+            image_data = np.array(new_image, np.float32)
+
+            # correct boxes
+            box_data = np.zeros((len(box),5))
+            if len(box)>0:
+                np.random.shuffle(box)
+                box[:, [0,2]] = box[:, [0,2]]*nw/iw + dx
+                box[:, [1,3]] = box[:, [1,3]]*nh/ih + dy
+                box[:, 0:2][box[:, 0:2]<0] = 0
+                box[:, 2][box[:, 2]>w] = w
+                box[:, 3][box[:, 3]>h] = h
+                box_w = box[:, 2] - box[:, 0]
+                box_h = box[:, 3] - box[:, 1]
+                box = box[np.logical_and(box_w>1, box_h>1)]
+                box_data = np.zeros((len(box),5))
+                box_data[:len(box)] = box
+
+            return image_data, box_data
 
         # resize image
         new_ar = w/h * rand(1-jitter,1+jitter)/rand(1-jitter,1+jitter)
@@ -95,49 +129,58 @@ class CenternetDataset(Dataset):
             box = box[np.logical_and(box_w>1, box_h>1)] # discard invalid box
             box_data = np.zeros((len(box),5))
             box_data[:len(box)] = box
-        if len(box) == 0:
-            return image_data, []
 
-        if (box_data[:,:4]>0).any():
-            return image_data, box_data
-        else:
-            return image_data, []
+        return image_data, box_data
 
     def __getitem__(self, index):
         if index == 0:
             shuffle(self.train_lines)
         lines = self.train_lines
 
-        img, y = self.get_random_data(lines[index], [self.input_size[0],self.input_size[1]])
+        #-------------------------------------------------#
+        #   进行数据增强
+        #-------------------------------------------------#
+        img, y = self.get_random_data(lines[index], [self.input_size[0],self.input_size[1]], random=self.is_train)
         
-        batch_hm = np.zeros((self.output_size[0], self.output_size[1], self.num_classes),
-                            dtype=np.float32)
+        batch_hm = np.zeros((self.output_size[0], self.output_size[1], self.num_classes), dtype=np.float32)
         batch_wh = np.zeros((self.output_size[0], self.output_size[1], 2), dtype=np.float32)
         batch_reg = np.zeros((self.output_size[0], self.output_size[1], 2), dtype=np.float32)
         batch_reg_mask = np.zeros((self.output_size[0], self.output_size[1]), dtype=np.float32)
         
         if len(y) != 0:
+            #-------------------------------------------------#
+            #   转换成相对于特征层的大小
+            #-------------------------------------------------#
             boxes = np.array(y[:,:4],dtype=np.float32)
-            boxes[:,0] = boxes[:,0]/self.input_size[1]*self.output_size[1]
-            boxes[:,1] = boxes[:,1]/self.input_size[0]*self.output_size[0]
-            boxes[:,2] = boxes[:,2]/self.input_size[1]*self.output_size[1]
-            boxes[:,3] = boxes[:,3]/self.input_size[0]*self.output_size[0]
+            boxes[:,0] = boxes[:,0] / self.input_size[1] * self.output_size[1]
+            boxes[:,1] = boxes[:,1] / self.input_size[0] * self.output_size[0]
+            boxes[:,2] = boxes[:,2] / self.input_size[1] * self.output_size[1]
+            boxes[:,3] = boxes[:,3] / self.input_size[0] * self.output_size[0]
 
         for i in range(len(y)):
             bbox = boxes[i].copy()
             bbox = np.array(bbox)
+            #-------------------------------------------------#
+            #   防止超出特征层的范围
+            #-------------------------------------------------#
             bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, self.output_size[1] - 1)
             bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, self.output_size[0] - 1)
-            cls_id = int(y[i,-1])
-            
+
+            cls_id = int(y[i, -1])
             h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
             if h > 0 and w > 0:
                 radius = gaussian_radius((math.ceil(h), math.ceil(w)))
                 radius = max(0, int(radius))
+                #-------------------------------------------------#
+                #   计算真实框所属的特征点
+                #-------------------------------------------------#
                 ct = np.array([(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
                 ct_int = ct.astype(np.int32)
+
+                #----------------------------#
+                #   绘制高斯热力图
+                #----------------------------#
                 batch_hm[:, :, cls_id] = draw_gaussian(batch_hm[:, :, cls_id], ct_int, radius)
-                
                 batch_wh[ct_int[1], ct_int[0]] = 1. * w, 1. * h
                 batch_reg[ct_int[1], ct_int[0]] = ct - ct_int
                 batch_reg_mask[ct_int[1], ct_int[0]] = 1

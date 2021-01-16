@@ -1,16 +1,23 @@
+#-------------------------------------#
+#   调用摄像头或者视频进行检测
+#   调用摄像头直接运行即可
+#   调用视频可以将cv2.VideoCapture()指定路径
+#   视频的保存并不难，可以百度一下看看
+#-------------------------------------#
 import time
 
 import cv2
 import numpy as np
-from keras.layers import Input
 from PIL import Image
 
 from centernet import CenterNet
 
 centernet = CenterNet()
-
-# 调用摄像头
-capture=cv2.VideoCapture(0) # capture=cv2.VideoCapture("1.mp4")
+#-------------------------------------#
+#   调用摄像头
+#   capture=cv2.VideoCapture("1.mp4")
+#-------------------------------------#
+capture=cv2.VideoCapture(0)
 
 fps = 0.0
 while(True):

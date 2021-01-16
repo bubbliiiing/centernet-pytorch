@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 import torch.nn as nn
+
+
 #-------------------------#
 #   卷积+标准化+激活函数
 #-------------------------#
@@ -22,7 +24,6 @@ class conv2d(nn.Module):
 #-------------------------#
 #   残差结构
 #-------------------------#
-
 class residual(nn.Module):
     def __init__(self, k, inp_dim, out_dim, stride=1, with_bn=True):
         super(residual, self).__init__()

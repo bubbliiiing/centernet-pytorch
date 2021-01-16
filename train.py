@@ -38,14 +38,12 @@ def fit_one_epoch(net,epoch,epoch_size,epoch_size_val,gen,genval,Epoch,cuda):
     total_c_loss = 0
     total_loss = 0
     val_loss = 0
-    start_time = time.time()
 
     net.train()
     with tqdm(total=epoch_size,desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3) as pbar:
         for iteration, batch in enumerate(gen):
             if iteration >= epoch_size:
                 break
-
             with torch.no_grad():
                 if cuda:
                     batch = [Variable(torch.from_numpy(ann).type(torch.FloatTensor)).cuda() for ann in batch]
@@ -80,25 +78,21 @@ def fit_one_epoch(net,epoch,epoch_size,epoch_size_val,gen,genval,Epoch,cuda):
                     off_loss = reg_l1_loss(offset, batch_regs, batch_reg_masks)
 
                     loss += c_loss + wh_loss + off_loss
-
+                    
                     c_loss_all += c_loss
                     r_loss_all += wh_loss + off_loss
                     index += 1
-                total_loss += loss.item()/index
-                total_c_loss += c_loss_all.item()/index
-                total_r_loss += r_loss_all.item()/index
+                total_loss += loss.item() / index
+                total_c_loss += c_loss_all.item() / index
+                total_r_loss += r_loss_all.item() / index
             loss.backward()
             optimizer.step()
             
-            waste_time = time.time() - start_time
-            
             pbar.set_postfix(**{'total_r_loss'  : total_r_loss / (iteration + 1), 
                                 'total_c_loss'  : total_c_loss / (iteration + 1),
-                                'lr'            : get_lr(optimizer),
-                                's/step'        : waste_time})
+                                'lr'            : get_lr(optimizer)})
             pbar.update(1)
 
-            start_time = time.time()
 
     net.eval()
     print('Start Validation')
@@ -134,7 +128,6 @@ def fit_one_epoch(net,epoch,epoch_size,epoch_size_val,gen,genval,Epoch,cuda):
                         index += 1
                     val_loss += loss.item()/index
 
-
             pbar.set_postfix(**{'total_loss': val_loss / (iteration + 1)})
             pbar.update(1)
             
@@ -151,11 +144,15 @@ if __name__ == "__main__":
     #   输入图片的大小
     #-------------------------------------------#
     input_shape = (512,512,3)
-    annotation_path = '2007_train.txt'
-    #-------------------------------------------#
-    #   类对应的txt
-    #-------------------------------------------#
+    #-----------------------------#
+    #   训练前一定要注意注意修改
+    #   classes_path对应的txt的内容
+    #   修改成自己需要分的类
+    #-----------------------------#
     classes_path = 'model_data/voc_classes.txt'  
+    #----------------------------------------------------#
+    #   获取classes和数量
+    #----------------------------------------------------#
     class_names = get_classes(classes_path)
     num_classes = len(class_names)
     #-------------------------------------------#
@@ -170,9 +167,15 @@ if __name__ == "__main__":
     #   resnet50和hourglass
     #-------------------------------------------#
     backbone = "resnet50"  
-
+    #-------------------------------#
+    #   是否使用Cuda
+    #   没有GPU可以设置成False
+    #-------------------------------#
     Cuda = True
 
+    #----------------------------------------------------#
+    #   获取centernet模型
+    #----------------------------------------------------#
     assert backbone in ['resnet50', 'hourglass']
     if backbone == "resnet50":
         model = CenterNet_Resnet50(num_classes, pretrain=pretrain)
@@ -183,7 +186,6 @@ if __name__ == "__main__":
     #   权值文件请看README，百度网盘下载
     #------------------------------------------------------#
     model_path = r"model_data/centernet_resnet50_voc.pth"
-    # 加快模型训练的效率
     print('Loading weights into state dict...')
     model_dict = model.state_dict() 
     pretrained_dict = torch.load(model_path)
@@ -199,7 +201,15 @@ if __name__ == "__main__":
         cudnn.benchmark = True
         net = net.cuda()
 
-    # 0.1用于验证，0.9用于训练
+    #----------------------------------------------------#
+    #   获得图片路径和标签
+    #----------------------------------------------------#
+    annotation_path = '2007_train.txt'
+    #----------------------------------------------------------------------#
+    #   验证集的划分在train.py代码里面进行
+    #   2007_test.txt和2007_val.txt里面没有内容是正常的。训练不会使用到。
+    #   当前划分方式下，验证集和训练集的比例为1:9
+    #----------------------------------------------------------------------#
     val_split = 0.1
     with open(annotation_path) as f:
         lines = f.readlines()
@@ -208,7 +218,6 @@ if __name__ == "__main__":
     np.random.seed(None)
     num_val = int(len(lines)*val_split)
     num_train = len(lines) - num_val
-    
     
     #------------------------------------------------------#
     #   主干特征提取网络特征通用，冻结训练可以加快训练速度
@@ -230,13 +239,12 @@ if __name__ == "__main__":
         optimizer = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
         lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2, verbose=True)
 
-        train_dataset = CenternetDataset(lines[:num_train], input_shape, num_classes)
-        val_dataset = CenternetDataset(lines[num_train:], input_shape, num_classes)
+        train_dataset = CenternetDataset(lines[:num_train], input_shape, num_classes, True)
+        val_dataset = CenternetDataset(lines[num_train:], input_shape, num_classes, False)
         gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=8, pin_memory=True,
                                 drop_last=True, collate_fn=centernet_dataset_collate)
         gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=8,pin_memory=True, 
                                 drop_last=True, collate_fn=centernet_dataset_collate)
-
 
         epoch_size = num_train//Batch_size
         epoch_size_val = num_val//Batch_size
@@ -261,14 +269,13 @@ if __name__ == "__main__":
         optimizer = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
         lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2, verbose=True)
 
-        train_dataset = CenternetDataset(lines[:num_train], input_shape, num_classes)
-        val_dataset = CenternetDataset(lines[num_train:], input_shape, num_classes)
+        train_dataset = CenternetDataset(lines[:num_train], input_shape, num_classes, True)
+        val_dataset = CenternetDataset(lines[num_train:], input_shape, num_classes, False)
         gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=8, pin_memory=True,
                                 drop_last=True, collate_fn=centernet_dataset_collate)
         gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=8,pin_memory=True, 
                                 drop_last=True, collate_fn=centernet_dataset_collate)
 
-                        
         epoch_size = num_train//Batch_size
         epoch_size_val = num_val//Batch_size
         #------------------------------------#
