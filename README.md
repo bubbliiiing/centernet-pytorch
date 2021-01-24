@@ -1,4 +1,4 @@
-## CenterNet:Objects as Points目标检测模型在Keras当中的实现
+## CenterNet:Objects as Points目标检测模型在Pytorch当中的实现
 ---
 
 ### 目录
