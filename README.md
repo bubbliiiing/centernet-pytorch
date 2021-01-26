@@ -21,7 +21,7 @@ torch==1.2.0
 
 ## 注意事项
 代码中的centernet_resnet50_voc.pth是使用voc数据集训练的。    
-代码中的centernet_hourglass_coco.pth是使用voc数据集训练的。   
+代码中的centernet_hourglass_coco.pth是使用coco数据集训练的。   
 **注意不要使用中文标签，文件夹中不要有空格！**     
 **在训练前需要务必在model_data下新建一个txt文档，文档中输入需要分的类，在train.py中将classes_path指向该文件**。     
 
