@@ -1,3 +1,4 @@
+import json
 import os
 
 import numpy as np
@@ -9,20 +10,30 @@ from centernet import CenterNet
 from utils.utils import (centernet_correct_boxes, decode_bbox, letterbox_image,
                          nms)
 
-'''
-这里设置的门限值较低是因为计算map需要用到不同门限条件下的Recall和Precision值。
-所以只有保留的框足够多，计算的map才会更精确，详情可以了解map的原理。
-计算map时输出的Recall和Precision值指的是门限为0.5时的Recall和Precision值。
+coco_classes = {'person': 1, 'bicycle': 2, 'car': 3, 'motorbike': 4, 'aeroplane': 5, 
+    'bus': 6, 'train': 7, 'truck': 8, 'boat': 9, 'traffic light': 10, 'fire hydrant': 11, 
+    '': 83, 'stop sign': 13, 'parking meter': 14, 'bench': 15, 'bird': 16, 'cat': 17, 
+    'dog': 18, 'horse': 19, 'sheep': 20, 'cow': 21, 'elephant': 22, 'bear': 23, 'zebra': 24, 
+    'giraffe': 25, 'backpack': 27, 'umbrella': 28, 'handbag': 31, 'tie': 32, 'suitcase': 33, 
+    'frisbee': 34, 'skis': 35, 'snowboard': 36, 'sports ball': 37, 'kite': 38, 'baseball bat': 39, 
+    'baseball glove': 40, 'skateboard': 41, 'surfboard': 42, 'tennis racket': 43, 'bottle': 44, 
+    'wine glass': 46, 'cup': 47, 'fork': 48, 'knife': 49, 'spoon': 50, 'bowl': 51, 'banana': 52, 
+    'apple': 53, 'sandwich': 54, 'orange': 55, 'broccoli': 56, 'carrot': 57, 'hot dog': 58, 
+    'pizza': 59, 'donut': 60, 'cake': 61, 'chair': 62, 'sofa': 63, 'pottedplant': 64, 'bed': 65, 
+    'diningtable': 67, 'toilet': 70, 'tvmonitor': 72, 'laptop': 73, 'mouse': 74, 'remote': 75, 
+    'keyboard': 76, 'cell phone': 77, 'microwave': 78, 'oven': 79, 'toaster': 80, 'sink': 81, 
+    'refrigerator': 82, 'book': 84, 'clock': 85, 'vase': 86, 'scissors': 87, 'teddy bear': 88, 
+    'hair drier': 89, 'toothbrush': 90
+}
 
-此处获得的./input/detection-results/里面的txt的框的数量会比直接predict多一些，这是因为这里的门限低，
-目的是为了计算不同门限条件下的Recall和Precision值，从而实现map的计算。
+clsid2catid = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 10: 11, 11: 13, 12: 14, 13: 15, 14: 16,
+               15: 17, 16: 18, 17: 19, 18: 20, 19: 21, 20: 22, 21: 23, 22: 24, 23: 25, 24: 27, 25: 28, 26: 31,
+               27: 32, 28: 33, 29: 34, 30: 35, 31: 36, 32: 37, 33: 38, 34: 39, 35: 40, 36: 41, 37: 42, 38: 43,
+               39: 44, 40: 46, 41: 47, 42: 48, 43: 49, 44: 50, 45: 51, 46: 52, 47: 53, 48: 54, 49: 55, 50: 56,
+               51: 57, 52: 58, 53: 59, 54: 60, 55: 61, 56: 62, 57: 63, 58: 64, 59: 65, 60: 67, 61: 70, 62: 72,
+               63: 73, 64: 74, 65: 75, 66: 76, 67: 77, 68: 78, 69: 79, 70: 80, 71: 81, 72: 82, 73: 84, 74: 85,
+               75: 86, 76: 87, 77: 88, 78: 89, 79: 90}
 
-这里的self.nms_threhold指的是非极大抑制所用到的iou，具体的可以了解非极大抑制的原理，
-如果低分框与高分框的iou大于这里设定的self.nms_threhold，那么该低分框将会被剔除。
-
-可能有些同学知道有0.5和0.5:0.95的mAP，这里的self.nms_threhold=0.5不代表mAP0.5。
-如果想要设定mAP0.x，比如设定mAP0.75，可以去get_map.py设定MINOVERLAP。
-'''
 def preprocess_image(image):
     mean = [0.40789655, 0.44719303, 0.47026116]
     std = [0.2886383, 0.27408165, 0.27809834]
@@ -32,15 +43,9 @@ class mAP_CenterNet(CenterNet):
     #---------------------------------------------------#
     #   检测图片
     #---------------------------------------------------#
-    def detect_image(self,image_id,image):
-        f = open("./input/detection-results/"+image_id+".txt","w") 
+    def detect_image(self, image_id, image, results):
         self.confidence = 0.01
         self.nms_threhold = 0.5
-
-        #---------------------------------------------------------#
-        #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
-        #---------------------------------------------------------#
-        image = image.convert('RGB')
 
         image_shape = np.array(np.shape(image)[0:2])
         #---------------------------------------------------------#
@@ -85,7 +90,7 @@ class mAP_CenterNet(CenterNet):
             
             output = outputs[0]
             if len(output)<=0:
-                return image
+                return results
 
             batch_boxes, det_conf, det_label = output[:,:4], output[:,4], output[:,5]
             det_xmin, det_ymin, det_xmax, det_ymax = batch_boxes[:, 0], batch_boxes[:, 1], batch_boxes[:, 2], batch_boxes[:, 3]
@@ -103,30 +108,33 @@ class mAP_CenterNet(CenterNet):
             boxes = centernet_correct_boxes(top_ymin,top_xmin,top_ymax,top_xmax,np.array([self.image_size[0],self.image_size[1]]),image_shape)
 
         for i, c in enumerate(top_label_indices):
+            result = {}
             predicted_class = self.class_names[int(c)]
-            score = str(top_conf[i])
-
             top, left, bottom, right = boxes[i]
-            f.write("%s %s %s %s %s %s\n" % (predicted_class, score[:6], str(int(left)), str(int(top)), str(int(right)),str(int(bottom))))
 
-        f.close()
-        return 
+            top = max(0, np.floor(top + 0.5).astype('int32'))
+            left = max(0, np.floor(left + 0.5).astype('int32'))
+            bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
+            right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
+
+            result["image_id"] = int(image_id)
+            result["category_id"] = clsid2catid[c]
+            result["bbox"] = [float(left),float(top),float(right-left),float(bottom-top)]
+            result["score"] = float(top_conf[i])
+            results.append(result)
+
+        return results
 
 centernet = mAP_CenterNet()
-image_ids = open('VOCdevkit/VOC2007/ImageSets/Main/test.txt').read().strip().split()
 
-if not os.path.exists("./input"):
-    os.makedirs("./input")
-if not os.path.exists("./input/detection-results"):
-    os.makedirs("./input/detection-results")
-if not os.path.exists("./input/images-optional"):
-    os.makedirs("./input/images-optional")
+jpg_names = os.listdir("./coco_dataset/val2017")
 
-for image_id in tqdm(image_ids):
-    image_path = "./VOCdevkit/VOC2007/JPEGImages/"+image_id+".jpg"
-    image = Image.open(image_path)
-    # image.save("./input/images-optional/"+image_id+".jpg")
-    centernet.detect_image(image_id,image)
-    
-
-print("Conversion completed!")
+with open("./coco_dataset/eval_results.json","w") as f:
+    results = []
+    for jpg_name in tqdm(jpg_names):
+        if jpg_name.endswith("jpg"):
+            image_path = "./coco_dataset/val2017/" + jpg_name
+            image = Image.open(image_path)
+            # 开启后在之后计算mAP可以可视化
+            results = centernet.detect_image(jpg_name.split(".")[0], image, results)
+    json.dump(results,f)

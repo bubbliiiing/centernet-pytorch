@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import torch.nn.functional as F
 from PIL import Image
 from torch import nn
 
@@ -23,8 +22,8 @@ def centernet_correct_boxes(top, left, bottom, right, input_shape, image_shape):
     offset = (input_shape-new_shape)/2./input_shape
     scale = input_shape/new_shape
 
-    box_yx = np.concatenate(((top+bottom)/2,(left+right)/2),axis=-1)
-    box_hw = np.concatenate((bottom-top,right-left),axis=-1)
+    box_yx = np.concatenate(((top+bottom)/2, (left+right)/2),axis=-1)
+    box_hw = np.concatenate((bottom-top, right-left),axis=-1)
 
     box_yx = (box_yx - offset) * scale
     box_hw *= scale
@@ -43,12 +42,11 @@ def centernet_correct_boxes(top, left, bottom, right, input_shape, image_shape):
 def pool_nms(heat, kernel=3):
     pad = (kernel - 1) // 2
 
-    hmax = nn.functional.max_pool2d(
-        heat, (kernel, kernel), stride=1, padding=pad)
+    hmax = nn.functional.max_pool2d(heat, (kernel, kernel), stride=1, padding=pad)
     keep = (hmax == heat).float()
     return heat * keep
 
-def decode_bbox(pred_hms, pred_whs, pred_offsets, image_size, threshold, cuda, topk=100):
+def decode_bbox(pred_hms, pred_whs, pred_offsets, threshold, cuda, topk=100):
     #-------------------------------------------------------------------------#
     #   当利用512x512x3图片进行coco数据集预测的时候
     #   h = w = 128 num_classes = 80
@@ -70,22 +68,22 @@ def decode_bbox(pred_hms, pred_whs, pred_offsets, image_size, threshold, cuda, t
         pred_wh     = pred_whs[batch].permute(1,2,0).view([-1,2])
         pred_offset = pred_offsets[batch].permute(1,2,0).view([-1,2])
 
-        yv, xv = torch.meshgrid(torch.arange(0, output_h), torch.arange(0, output_w))
+        yv, xv      = torch.meshgrid(torch.arange(0, output_h), torch.arange(0, output_w))
         #-------------------------------------------------------------------------#
         #   xv              128*128,    特征点的x轴坐标
         #   yv              128*128,    特征点的y轴坐标
         #-------------------------------------------------------------------------#
-        xv, yv = xv.flatten().float(), yv.flatten().float()
+        xv, yv      = xv.flatten().float(), yv.flatten().float()
         if cuda:
-            xv = xv.cuda()
-            yv = yv.cuda()
+            xv      = xv.cuda()
+            yv      = yv.cuda()
 
         #-------------------------------------------------------------------------#
         #   class_conf      128*128,    特征点的种类置信度
         #   class_pred      128*128,    特征点的种类
         #-------------------------------------------------------------------------#
-        class_conf, class_pred = torch.max(heat_map, dim=-1)
-        mask = class_conf > threshold
+        class_conf, class_pred  = torch.max(heat_map, dim=-1)
+        mask                    = class_conf > threshold
 
         #-----------------------------------------#
         #   取出得分筛选后对应的结果

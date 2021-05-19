@@ -1,13 +1,10 @@
 import colorsys
 import os
-import pickle
 
-import cv2
 import numpy as np
 import torch
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont
 from torch import nn
-from torch.autograd import Variable
 
 from nets.centernet import CenterNet_HourglassNet, CenterNet_Resnet50
 from utils.utils import (centernet_correct_boxes, decode_bbox, letterbox_image,
@@ -114,22 +111,27 @@ class CenterNet(object):
     #   检测图片
     #---------------------------------------------------#
     def detect_image(self, image):
+        #---------------------------------------------------------#
+        #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
+        #---------------------------------------------------------#
+        image = image.convert('RGB')
+
         image_shape = np.array(np.shape(image)[0:2])
         #---------------------------------------------------------#
         #   给图像增加灰条，实现不失真的resize
         #---------------------------------------------------------#
-        crop_img = letterbox_image(image, [self.image_size[0],self.image_size[1]])
+        crop_img = letterbox_image(image, [self.image_size[1], self.image_size[0]])
         #----------------------------------------------------------------------------------#
         #   将RGB转化成BGR，这是因为原始的centernet_hourglass权值是使用BGR通道的图片训练的
         #----------------------------------------------------------------------------------#
-        photo = np.array(crop_img,dtype = np.float32)[:,:,::-1]
+        photo = np.array(crop_img, dtype = np.float32)[:,:,::-1]
         #-----------------------------------------------------------#
         #   图片预处理，归一化。获得的photo的shape为[1, 512, 512, 3]
         #-----------------------------------------------------------#
         photo = np.reshape(np.transpose(preprocess_image(photo), (2, 0, 1)), [1, self.image_size[2], self.image_size[0], self.image_size[1]])
         
         with torch.no_grad():
-            images = Variable(torch.from_numpy(np.asarray(photo)).type(torch.FloatTensor))
+            images = torch.from_numpy(np.asarray(photo)).type(torch.FloatTensor)
             if self.cuda:
                 images = images.cuda()
 
@@ -139,7 +141,7 @@ class CenterNet(object):
             #-----------------------------------------------------------#
             #   利用预测结果进行解码
             #-----------------------------------------------------------#
-            outputs = decode_bbox(outputs[0],outputs[1],outputs[2], self.image_size, self.confidence, self.cuda)
+            outputs = decode_bbox(outputs[0], outputs[1], outputs[2], self.confidence, self.cuda)
 
             #-------------------------------------------------------#
             #   对于centernet网络来讲，确立中心非常重要。

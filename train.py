@@ -1,21 +1,15 @@
 #-------------------------------------#
 #       对数据集进行训练
 #-------------------------------------#
-import os
-import time
-
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from nets.centernet import CenterNet_HourglassNet, CenterNet_Resnet50
-from nets.centernet_training import focal_loss, reg_l1_loss
+from nets.centernet_training import focal_loss, reg_l1_loss, LossHistory, weights_init
 from utils.dataloader import CenternetDataset, centernet_dataset_collate
 
 
@@ -34,57 +28,58 @@ def get_lr(optimizer):
         return param_group['lr']
 
 def fit_one_epoch(net,epoch,epoch_size,epoch_size_val,gen,genval,Epoch,cuda):
-    total_r_loss = 0
-    total_c_loss = 0
-    total_loss = 0
-    val_loss = 0
+    total_r_loss    = 0
+    total_c_loss    = 0
+    total_loss      = 0
+    val_loss        = 0
 
     net.train()
+    print('Start Train')
     with tqdm(total=epoch_size,desc=f'Epoch {epoch + 1}/{Epoch}',postfix=dict,mininterval=0.3) as pbar:
         for iteration, batch in enumerate(gen):
             if iteration >= epoch_size:
                 break
             with torch.no_grad():
                 if cuda:
-                    batch = [Variable(torch.from_numpy(ann).type(torch.FloatTensor)).cuda() for ann in batch]
+                    batch = [torch.from_numpy(ann).type(torch.FloatTensor).cuda() for ann in batch]
                 else:
-                    batch = [Variable(torch.from_numpy(ann).type(torch.FloatTensor)) for ann in batch]
+                    batch = [torch.from_numpy(ann).type(torch.FloatTensor) for ann in batch]
 
             batch_images, batch_hms, batch_whs, batch_regs, batch_reg_masks = batch
 
             optimizer.zero_grad()
 
             if backbone=="resnet50":
-                hm, wh, offset = net(batch_images)
-                c_loss = focal_loss(hm, batch_hms)
-                wh_loss = 0.1*reg_l1_loss(wh, batch_whs, batch_reg_masks)
-                off_loss = reg_l1_loss(offset, batch_regs, batch_reg_masks)
+                hm, wh, offset  = net(batch_images)
+                c_loss          = focal_loss(hm, batch_hms)
+                wh_loss         = 0.1 * reg_l1_loss(wh, batch_whs, batch_reg_masks)
+                off_loss        = reg_l1_loss(offset, batch_regs, batch_reg_masks)
                 
-                loss = c_loss + wh_loss + off_loss
+                loss            = c_loss + wh_loss + off_loss
 
-                total_loss += loss.item()
-                total_c_loss += c_loss.item()
-                total_r_loss += wh_loss.item() + off_loss.item()
+                total_loss      += loss.item()
+                total_c_loss    += c_loss.item()
+                total_r_loss    += wh_loss.item() + off_loss.item()
             else:
                 outputs = net(batch_images)
-                loss = 0
-                c_loss_all = 0
-                r_loss_all = 0
-                index = 0
+                loss            = 0
+                c_loss_all      = 0
+                r_loss_all      = 0
+                index           = 0
                 for output in outputs:
                     hm, wh, offset = output["hm"].sigmoid(), output["wh"], output["reg"]
-                    c_loss = focal_loss(hm, batch_hms)
-                    wh_loss = 0.1*reg_l1_loss(wh, batch_whs, batch_reg_masks)
-                    off_loss = reg_l1_loss(offset, batch_regs, batch_reg_masks)
+                    c_loss      = focal_loss(hm, batch_hms)
+                    wh_loss     = 0.1 * reg_l1_loss(wh, batch_whs, batch_reg_masks)
+                    off_loss    = reg_l1_loss(offset, batch_regs, batch_reg_masks)
 
-                    loss += c_loss + wh_loss + off_loss
+                    loss        += c_loss + wh_loss + off_loss
                     
-                    c_loss_all += c_loss
-                    r_loss_all += wh_loss + off_loss
-                    index += 1
-                total_loss += loss.item() / index
-                total_c_loss += c_loss_all.item() / index
-                total_r_loss += r_loss_all.item() / index
+                    c_loss_all  += c_loss
+                    r_loss_all  += wh_loss + off_loss
+                    index       += 1
+                total_loss      += loss.item() / index
+                total_c_loss    += c_loss_all.item() / index
+                total_r_loss    += r_loss_all.item() / index
             loss.backward()
             optimizer.step()
             
@@ -102,39 +97,42 @@ def fit_one_epoch(net,epoch,epoch_size,epoch_size_val,gen,genval,Epoch,cuda):
                 break
             with torch.no_grad():
                 if cuda:
-                    batch = [Variable(torch.from_numpy(ann).type(torch.FloatTensor)).cuda() for ann in batch]
+                    batch = [torch.from_numpy(ann).type(torch.FloatTensor).cuda() for ann in batch]
                 else:
-                    batch = [Variable(torch.from_numpy(ann).type(torch.FloatTensor)) for ann in batch]
+                    batch = [torch.from_numpy(ann).type(torch.FloatTensor) for ann in batch]
 
                 batch_images, batch_hms, batch_whs, batch_regs, batch_reg_masks = batch
 
                 if backbone=="resnet50":
-                    hm, wh, offset = net(batch_images)
-                    c_loss = focal_loss(hm, batch_hms)
-                    wh_loss = 0.1*reg_l1_loss(wh, batch_whs, batch_reg_masks)
-                    off_loss = reg_l1_loss(offset, batch_regs, batch_reg_masks)
-                    loss = c_loss + wh_loss + off_loss
-                    val_loss += loss.item()
+                    hm, wh, offset  = net(batch_images)
+                    c_loss          = focal_loss(hm, batch_hms)
+                    wh_loss         = 0.1 * reg_l1_loss(wh, batch_whs, batch_reg_masks)
+                    off_loss        = reg_l1_loss(offset, batch_regs, batch_reg_masks)
+
+                    loss            = c_loss + wh_loss + off_loss
+
+                    val_loss        += loss.item()
                 else:
                     outputs = net(batch_images)
                     index = 0
                     loss = 0
                     for output in outputs:
-                        hm, wh, offset = output["hm"].sigmoid(), output["wh"], output["reg"]
-                        c_loss = focal_loss(hm, batch_hms)
-                        wh_loss = 0.1*reg_l1_loss(wh, batch_whs, batch_reg_masks)
-                        off_loss = reg_l1_loss(offset, batch_regs, batch_reg_masks)
-                        loss += c_loss + wh_loss + off_loss
-                        index += 1
-                    val_loss += loss.item()/index
+                        hm, wh, offset  = output["hm"].sigmoid(), output["wh"], output["reg"]
+                        c_loss          = focal_loss(hm, batch_hms)
+                        wh_loss         = 0.1*reg_l1_loss(wh, batch_whs, batch_reg_masks)
+                        off_loss        = reg_l1_loss(offset, batch_regs, batch_reg_masks)
+
+                        loss            += c_loss + wh_loss + off_loss
+                        index           += 1
+                    val_loss            += loss.item() / index
 
             pbar.set_postfix(**{'total_loss': val_loss / (iteration + 1)})
             pbar.update(1)
             
+    loss_history.append_loss(total_loss/(epoch_size+1), val_loss/(epoch_size_val+1))
     print('Finish Validation')
     print('Epoch:'+ str(epoch+1) + '/' + str(Epoch))
     print('Total Loss: %.4f || Val Loss: %.4f ' % (total_loss/(epoch_size+1),val_loss/(epoch_size_val+1)))
-
     print('Saving state, iter:', str(epoch+1))
     torch.save(model.state_dict(), 'logs/Epoch%d-Total_Loss%.4f-Val_Loss%.4f.pth'%((epoch+1),total_loss/(epoch_size+1),val_loss/(epoch_size_val+1)))
     return val_loss/(epoch_size_val+1)
@@ -181,6 +179,8 @@ if __name__ == "__main__":
         model = CenterNet_Resnet50(num_classes, pretrain=pretrain)
     else:
         model = CenterNet_HourglassNet({'hm': num_classes, 'wh': 2, 'reg':2})
+    if not pretrain:
+        weights_init(model)
 
     #------------------------------------------------------#
     #   权值文件请看README，百度网盘下载
@@ -201,6 +201,7 @@ if __name__ == "__main__":
         cudnn.benchmark = True
         net = net.cuda()
 
+    loss_history = LossHistory("logs/")
     #----------------------------------------------------#
     #   获得图片路径和标签
     #----------------------------------------------------#
@@ -231,23 +232,26 @@ if __name__ == "__main__":
         #--------------------------------------------#
         #   BATCH_SIZE不要太小，不然训练效果很差
         #--------------------------------------------#
-        lr = 1e-3
-        Batch_size = 8
-        Init_Epoch = 0
-        Freeze_Epoch = 50
+        lr              = 1e-3
+        Batch_size      = 8
+        Init_Epoch      = 0
+        Freeze_Epoch    = 50
         
-        optimizer = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2, verbose=True)
+        optimizer       = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
+        lr_scheduler    = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2, verbose=True)
 
-        train_dataset = CenternetDataset(lines[:num_train], input_shape, num_classes, True)
-        val_dataset = CenternetDataset(lines[num_train:], input_shape, num_classes, False)
-        gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=8, pin_memory=True,
+        train_dataset   = CenternetDataset(lines[:num_train], input_shape, num_classes, True)
+        val_dataset     = CenternetDataset(lines[num_train:], input_shape, num_classes, False)
+        gen             = DataLoader(train_dataset, batch_size=Batch_size, num_workers=8, pin_memory=True,
                                 drop_last=True, collate_fn=centernet_dataset_collate)
-        gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=8,pin_memory=True, 
+        gen_val         = DataLoader(val_dataset, batch_size=Batch_size, num_workers=8,pin_memory=True, 
                                 drop_last=True, collate_fn=centernet_dataset_collate)
 
-        epoch_size = num_train//Batch_size
-        epoch_size_val = num_val//Batch_size
+        epoch_size      = num_train // Batch_size
+        epoch_size_val  = num_val // Batch_size
+        
+        if epoch_size == 0 or epoch_size_val == 0:
+            raise ValueError("数据集过小，无法进行训练，请扩充数据集。")
         #------------------------------------#
         #   冻结一定部分训练
         #------------------------------------#
@@ -261,23 +265,26 @@ if __name__ == "__main__":
         #--------------------------------------------#
         #   BATCH_SIZE不要太小，不然训练效果很差
         #--------------------------------------------#
-        lr = 1e-4
-        Batch_size = 4
-        Freeze_Epoch = 50
-        Unfreeze_Epoch = 100
+        lr              = 1e-4
+        Batch_size      = 4
+        Freeze_Epoch    = 50
+        Unfreeze_Epoch  = 100
 
-        optimizer = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
-        lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2, verbose=True)
+        optimizer       = optim.Adam(net.parameters(),lr,weight_decay=5e-4)
+        lr_scheduler    = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2, verbose=True)
 
-        train_dataset = CenternetDataset(lines[:num_train], input_shape, num_classes, True)
-        val_dataset = CenternetDataset(lines[num_train:], input_shape, num_classes, False)
-        gen = DataLoader(train_dataset, batch_size=Batch_size, num_workers=8, pin_memory=True,
+        train_dataset   = CenternetDataset(lines[:num_train], input_shape, num_classes, True)
+        val_dataset     = CenternetDataset(lines[num_train:], input_shape, num_classes, False)
+        gen             = DataLoader(train_dataset, batch_size=Batch_size, num_workers=8, pin_memory=True,
                                 drop_last=True, collate_fn=centernet_dataset_collate)
-        gen_val = DataLoader(val_dataset, batch_size=Batch_size, num_workers=8,pin_memory=True, 
+        gen_val         = DataLoader(val_dataset, batch_size=Batch_size, num_workers=8,pin_memory=True, 
                                 drop_last=True, collate_fn=centernet_dataset_collate)
 
-        epoch_size = num_train//Batch_size
-        epoch_size_val = num_val//Batch_size
+        epoch_size      = num_train // Batch_size
+        epoch_size_val  = num_val // Batch_size
+        
+        if epoch_size == 0 or epoch_size_val == 0:
+            raise ValueError("数据集过小，无法进行训练，请扩充数据集。")
         #------------------------------------#
         #   解冻后训练
         #------------------------------------#

@@ -9,8 +9,9 @@ predict.py有几个注意点
 5、如果想要在预测图上写额外的字，比如检测到的特定目标的数量，可以进入detect_image函数，在绘图部分对predicted_class进行判断，
 比如判断if predicted_class == 'car': 即可判断当前目标是否为车，然后记录数量即可。利用draw.text即可写字。
 '''
-from centernet import CenterNet
 from PIL import Image
+
+from centernet import CenterNet
 
 centernet = CenterNet()
 

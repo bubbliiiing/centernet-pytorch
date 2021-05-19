@@ -3,7 +3,6 @@
 #   map测试请看get_dr_txt.py、get_gt_txt.py
 #   和get_map.py
 #--------------------------------------------#
-import torch
 from torchsummary import summary
 
 from nets.centernet import CenterNet_HourglassNet, CenterNet_Resnet50
