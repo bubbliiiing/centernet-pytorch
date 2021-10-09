@@ -28,8 +28,9 @@ torch==1.2.0
 
 ## 文件下载 
 训练所需的centernet_resnet50_voc.pth、centernet_hourglass_coco.pth可在百度网盘中下载。    
-链接: https://pan.baidu.com/s/1QBBgRb_TH8kJdSCQGgcXmQ 提取码: phnc      
- 
+链接: https://pan.baidu.com/s/1dnQCtvQRenqL74Gk5ovM6Q    
+提取码: kfv1 
+
 centernet_resnet50_voc.pth是voc数据集的权重。    
 centernet_hourglass_coco.pth是coco数据集的权重。    
 
