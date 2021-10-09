@@ -1,21 +1,15 @@
 from __future__ import absolute_import, division, print_function
 
 import math
-import pdb
-
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.model_zoo as model_zoo
-from torch.autograd import Variable
 from torchvision.models.utils import load_state_dict_from_url
 
 model_urls = {
-'resnet18': 'https://s3.amazonaws.com/pytorch/models/resnet18-5c106cde.pth',
-'resnet34': 'https://s3.amazonaws.com/pytorch/models/resnet34-333f7ec4.pth',
-'resnet50': 'https://s3.amazonaws.com/pytorch/models/resnet50-19c8e357.pth',
-'resnet101': 'https://s3.amazonaws.com/pytorch/models/resnet101-5d3b4d8f.pth',
-'resnet152': 'https://s3.amazonaws.com/pytorch/models/resnet152-b121ed2d.pth',
+    'resnet18': 'https://s3.amazonaws.com/pytorch/models/resnet18-5c106cde.pth',
+    'resnet34': 'https://s3.amazonaws.com/pytorch/models/resnet34-333f7ec4.pth',
+    'resnet50': 'https://s3.amazonaws.com/pytorch/models/resnet50-19c8e357.pth',
+    'resnet101': 'https://s3.amazonaws.com/pytorch/models/resnet101-5d3b4d8f.pth',
+    'resnet152': 'https://s3.amazonaws.com/pytorch/models/resnet152-b121ed2d.pth',
 }
 
 class Bottleneck(nn.Module):
@@ -128,14 +122,14 @@ class ResNet(nn.Module):
 
         return x
 
-def resnet50(pretrain = True):
+def resnet50(pretrained = True):
     model = ResNet(Bottleneck, [3, 4, 6, 3])
-    
-    if pretrain:
-        state_dict = load_state_dict_from_url(model_urls['resnet50'])
+    if pretrained:
+        state_dict = load_state_dict_from_url(model_urls['resnet50'], model_dir = 'model_data/')
         model.load_state_dict(state_dict)
-
-    # 获取特征提取部分
+    #----------------------------------------------------------#
+    #   获取特征提取部分
+    #----------------------------------------------------------#
     features = list([model.conv1, model.bn1, model.relu, model.maxpool, model.layer1, model.layer2, model.layer3, model.layer4])
     features = nn.Sequential(*features)
     return features

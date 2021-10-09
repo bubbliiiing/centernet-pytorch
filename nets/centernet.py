@@ -1,5 +1,3 @@
-import torch
-import torch.nn.functional as F
 from torch import nn
 
 from nets.hourglass import *
@@ -7,10 +5,10 @@ from nets.resnet50 import resnet50, resnet50_Decoder, resnet50_Head
 
 
 class CenterNet_Resnet50(nn.Module):
-    def __init__(self, num_classes = 20, pretrain = False):
+    def __init__(self, num_classes = 20, pretrained = False):
         super(CenterNet_Resnet50, self).__init__()
         # 512,512,3 -> 16,16,2048
-        self.backbone = resnet50(pretrain=pretrain)
+        self.backbone = resnet50(pretrained = pretrained)
         # 16,16,2048 -> 128,128,64
         self.decoder = resnet50_Decoder(2048)
         #-----------------------------------------------------------------#
@@ -34,8 +32,11 @@ class CenterNet_Resnet50(nn.Module):
         return self.head(self.decoder(feat))
 
 class CenterNet_HourglassNet(nn.Module):
-    def __init__(self, heads, num_stacks=2, n=5, cnv_dim=256, dims=[256, 256, 384, 384, 384, 512], modules = [2, 2, 2, 2, 2, 4]):
+    def __init__(self, heads, pretrained=False, num_stacks=2, n=5, cnv_dim=256, dims=[256, 256, 384, 384, 384, 512], modules = [2, 2, 2, 2, 2, 4]):
         super(CenterNet_HourglassNet, self).__init__()
+        if pretrained:
+            raise ValueError("HourglassNet has no pretrained model")
+
         self.nstack    = num_stacks
         self.heads     = heads
 
