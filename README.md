@@ -1,6 +1,9 @@
 ## CenterNet:Objects as Points目标检测模型在Pytorch当中的实现
 ---
 
+**2021年10月12日更新：**   
+**进行了大幅度的更新，对代码的模块进行修改，加了大量注释。**   
+
 ## 目录
 1. [性能情况 Performance](#性能情况)
 2. [所需环境 Environment](#所需环境)
@@ -27,7 +30,7 @@ torch==1.2.0
 **在训练前需要务必在model_data下新建一个txt文档，文档中输入需要分的类，在train.py中将classes_path指向该文件**。     
 
 ## 文件下载 
-训练所需的centernet_resnet50_voc.pth、centernet_hourglass_coco.pth可在百度网盘中下载。    
+训练所需的centernet_resnet50_voc.pth、centernet_hourglass_coco.pth和主干的权值可在百度网盘中下载。    
 链接: https://pan.baidu.com/s/1dnQCtvQRenqL74Gk5ovM6Q    
 提取码: kfv1 
 
