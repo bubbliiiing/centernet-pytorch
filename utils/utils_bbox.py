@@ -146,6 +146,8 @@ def postprocess(prediction, need_nms, image_shape, input_shape, letterbox_image,
     #----------------------------------------------------------#
     for i, image_pred in enumerate(prediction):
         detections      = prediction[i]
+        if len(detections) == 0:
+            continue
         #------------------------------------------#
         #   获得预测结果中包含的所有种类
         #------------------------------------------#
