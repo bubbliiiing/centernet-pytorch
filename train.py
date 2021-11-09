@@ -188,7 +188,8 @@ if __name__ == "__main__":
         #------------------------------------#
         #   冻结一定部分训练
         #------------------------------------#
-        model.freeze_backbone()
+        if Freeze_Train:
+            model.freeze_backbone()
 
         for epoch in range(start_epoch, end_epoch):
             fit_one_epoch(model_train, model, loss_history, optimizer, epoch, 
@@ -220,7 +221,8 @@ if __name__ == "__main__":
         #------------------------------------#
         #   解冻后训练
         #------------------------------------#
-        model.unfreeze_backbone()
+        if Freeze_Train:
+            model.unfreeze_backbone()
                 
         for epoch in range(start_epoch, end_epoch):
             fit_one_epoch(model_train, model, loss_history, optimizer, epoch, 
