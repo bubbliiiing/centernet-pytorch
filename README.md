@@ -1,18 +1,23 @@
 ## CenterNet:Objects as Points目标检测模型在Pytorch当中的实现
 ---
 
-**2021年10月12日更新：**   
-**进行了大幅度的更新，对代码的模块进行修改，加了大量注释。**   
 
 ## 目录
-1. [性能情况 Performance](#性能情况)
-2. [所需环境 Environment](#所需环境)
-3. [注意事项 Attention](#注意事项)
-4. [文件下载 Download](#文件下载)
-5. [预测步骤 How2predict](#预测步骤)
+1. [仓库更新 Top News](#仓库更新)
+2. [性能情况 Performance](#性能情况)
+3. [所需环境 Environment](#所需环境)
+4. [注意事项 Attention](#注意事项)
+5. [文件下载 Download](#文件下载)
 6. [训练步骤 How2train](#训练步骤)
-7. [评估步骤 How2eval](#评估步骤)
-8. [参考资料 Reference](#Reference)
+7. [预测步骤 How2predict](#预测步骤)
+8. [评估步骤 How2eval](#评估步骤)
+9. [参考资料 Reference](#Reference)
+
+## Top News
+**`2022-04`**:**进行了大幅度的更新，支持step、cos学习率下降法、支持adam、sgd优化器选择、支持学习率根据batch_size自适应调整、新增图片裁剪。**  
+BiliBili视频中的原仓库地址为：https://github.com/bubbliiiing/centernet-pytorch/tree/bilibili
+
+**`2021-10`**:**进行了大幅度的更新，增加了大量注释、增加了大量可调整参数、对代码的组成模块进行修改、增加fps、视频预测、批量预测等功能。**   
 
 ## 性能情况
 | 训练数据集 | 权值文件名称 | 测试数据集 | 输入图片大小 | mAP 0.5:0.95 | mAP 0.5 |
@@ -31,15 +36,15 @@ torch==1.2.0
 
 ## 文件下载 
 训练所需的centernet_resnet50_voc.pth、centernet_hourglass_coco.pth和主干的权值可在百度网盘中下载。    
-链接: https://pan.baidu.com/s/1dnQCtvQRenqL74Gk5ovM6Q    
-提取码: kfv1 
+链接: https://pan.baidu.com/s/1YOQgpCiXPKiXC9Wgn6Kt0w     
+提取码: 589g    
 
 centernet_resnet50_voc.pth是voc数据集的权重。    
 centernet_hourglass_coco.pth是coco数据集的权重。    
 
 VOC数据集下载地址如下，里面已经包括了训练集、测试集、验证集（与测试集一样），无需再次划分：  
-链接: https://pan.baidu.com/s/1YuBbBKxm2FGgTU5OfaeC5A    
-提取码: uack   
+链接: https://pan.baidu.com/s/19Mw2u_df_nBzsC2lg20fQA   
+提取码: j5ge   
 
 ## 训练步骤
 ### a、训练VOC07+12数据集
