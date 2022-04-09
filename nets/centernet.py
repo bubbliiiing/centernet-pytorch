@@ -1,3 +1,6 @@
+import math
+
+import torch.nn as nn
 from torch import nn
 
 from nets.hourglass import *
@@ -7,6 +10,7 @@ from nets.resnet50 import resnet50, resnet50_Decoder, resnet50_Head
 class CenterNet_Resnet50(nn.Module):
     def __init__(self, num_classes = 20, pretrained = False):
         super(CenterNet_Resnet50, self).__init__()
+        self.pretrained = pretrained
         # 512,512,3 -> 16,16,2048
         self.backbone = resnet50(pretrained = pretrained)
         # 16,16,2048 -> 128,128,64
@@ -18,6 +22,8 @@ class CenterNet_Resnet50(nn.Module):
         #                -> 128, 128, 64 -> 128, 128, 2
         #-----------------------------------------------------------------#
         self.head = resnet50_Head(channel=64, num_classes=num_classes)
+        
+        self._init_weights()
 
     def freeze_backbone(self):
         for param in self.backbone.parameters():
@@ -27,6 +33,19 @@ class CenterNet_Resnet50(nn.Module):
         for param in self.backbone.parameters():
             param.requires_grad = True
 
+    def _init_weights(self):
+        if not self.pretrained:
+            for m in self.modules():
+                if isinstance(m, nn.Conv2d):
+                    n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                    m.weight.data.normal_(0, math.sqrt(2. / n))
+                elif isinstance(m, nn.BatchNorm2d):
+                    m.weight.data.fill_(1)
+                    m.bias.data.zero_()
+        
+        self.head.cls_head[-1].weight.data.fill_(0)
+        self.head.cls_head[-1].bias.data.fill_(-2.19)
+        
     def forward(self, x):
         feat = self.backbone(x)
         return self.head(self.decoder(feat))
@@ -85,6 +104,7 @@ class CenterNet_HourglassNet(nn.Module):
                 ])
                 self.__setattr__(head, module)
                 for heat in self.__getattr__(head):
+                    heat[-1].weight.data.fill_(0)
                     heat[-1].bias.data.fill_(-2.19)
             else:
                 module = nn.ModuleList([
