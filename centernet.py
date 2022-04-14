@@ -96,7 +96,7 @@ class CenterNet(object):
     #---------------------------------------------------#
     #   载入模型
     #---------------------------------------------------#
-    def generate(self):
+    def generate(self, onnx=False):
         #-------------------------------#
         #   载入模型与权值
         #-------------------------------#
@@ -110,16 +110,15 @@ class CenterNet(object):
         self.net.load_state_dict(torch.load(self.model_path, map_location=device))
         self.net    = self.net.eval()
         print('{} model, and classes loaded.'.format(self.model_path))
-
-        if self.cuda:
-            self.net = torch.nn.DataParallel(self.net)
-            cudnn.benchmark = True
-            self.net = self.net.cuda()
+        if not onnx:
+            if self.cuda:
+                self.net = torch.nn.DataParallel(self.net)
+                self.net = self.net.cuda()
 
     #---------------------------------------------------#
     #   检测图片
     #---------------------------------------------------#
-    def detect_image(self, image, crop = False):
+    def detect_image(self, image, crop = False, count = False):
         #---------------------------------------------------#
         #   计算输入图片的高和宽
         #---------------------------------------------------#
@@ -179,7 +178,18 @@ class CenterNet(object):
         #---------------------------------------------------------#
         font = ImageFont.truetype(font='model_data/simhei.ttf', size=np.floor(3e-2 * np.shape(image)[1] + 0.5).astype('int32'))
         thickness = max((np.shape(image)[0] + np.shape(image)[1]) // self.input_shape[0], 1)
-
+        #---------------------------------------------------------#
+        #   计数
+        #---------------------------------------------------------#
+        if count:
+            print("top_label:", top_label)
+            classes_nums    = np.zeros([self.num_classes])
+            for i in range(self.num_classes):
+                num = np.sum(top_label == i)
+                if num > 0:
+                    print(self.class_names[i], " : ", num)
+                classes_nums[i] = num
+            print("classes_nums:", classes_nums)
         #---------------------------------------------------------#
         #   是否进行目标的裁剪
         #---------------------------------------------------------#
@@ -303,7 +313,91 @@ class CenterNet(object):
         t2 = time.time()
         tact_time = (t2 - t1) / test_interval
         return tact_time
+
+    def detect_heatmap(self, image, heatmap_save_path):
+        import cv2
+        import matplotlib.pyplot as plt
+        #---------------------------------------------------------#
+        #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
+        #   代码仅仅支持RGB图像的预测，所有其它类型的图像都会转化成RGB
+        #---------------------------------------------------------#
+        image       = cvtColor(image)
+        #---------------------------------------------------------#
+        #   给图像增加灰条，实现不失真的resize
+        #   也可以直接resize进行识别
+        #---------------------------------------------------------#
+        image_data  = resize_image(image, (self.input_shape[1], self.input_shape[0]), self.letterbox_image)
+        #-----------------------------------------------------------#
+        #   图片预处理，归一化。获得的photo的shape为[1, 512, 512, 3]
+        #-----------------------------------------------------------#
+        image_data = np.expand_dims(np.transpose(preprocess_input(np.array(image_data, dtype='float32')), (2, 0, 1)), 0)
+
+        with torch.no_grad():
+            images = torch.from_numpy(np.asarray(image_data)).type(torch.FloatTensor)
+            if self.cuda:
+                images = images.cuda()
+            #---------------------------------------------------------#
+            #   将图像输入网络当中进行预测！
+            #---------------------------------------------------------#
+            outputs = self.net(images)
+            if self.backbone == 'hourglass':
+                outputs = [outputs[-1]["hm"].sigmoid(), outputs[-1]["wh"], outputs[-1]["reg"]]
         
+        plt.imshow(image, alpha=1)
+        plt.axis('off')
+        mask        = np.zeros((image.size[1], image.size[0]))
+        score       = np.max(outputs[0][0].permute(1, 2, 0).cpu().numpy(), -1)
+        score       = cv2.resize(score, (image.size[1], image.size[0]))
+        normed_score    = (score * 255).astype('uint8')
+        mask            = np.maximum(mask, normed_score)
+        
+        plt.imshow(mask, alpha=0.5, interpolation='nearest', cmap="jet")
+
+        plt.axis('off')
+        plt.subplots_adjust(top=1, bottom=0, right=1,  left=0, hspace=0, wspace=0)
+        plt.margins(0, 0)
+        plt.savefig(heatmap_save_path, dpi=200, bbox_inches='tight', pad_inches = -0.1)
+        print("Save to the " + heatmap_save_path)
+        plt.show()
+
+    def convert_to_onnx(self, simplify, model_path):
+        import onnx
+        self.generate(onnx=True)
+
+        im                  = torch.zeros(1, 3, *self.input_shape).to('cpu')  # image size(1, 3, 512, 512) BCHW
+        input_layer_names   = ["images"]
+        output_layer_names  = ["output"]
+        
+        # Export the model
+        print(f'Starting export with onnx {onnx.__version__}.')
+        torch.onnx.export(self.net,
+                        im,
+                        f               = model_path,
+                        verbose         = False,
+                        opset_version   = 12,
+                        training        = torch.onnx.TrainingMode.EVAL,
+                        do_constant_folding = True,
+                        input_names     = input_layer_names,
+                        output_names    = output_layer_names,
+                        dynamic_axes    = None)
+
+        # Checks
+        model_onnx = onnx.load(model_path)  # load onnx model
+        onnx.checker.check_model(model_onnx)  # check onnx model
+
+        # Simplify onnx
+        if simplify:
+            import onnxsim
+            print(f'Simplifying with onnx-simplifier {onnxsim.__version__}.')
+            model_onnx, check = onnxsim.simplify(
+                model_onnx,
+                dynamic_input_shape=False,
+                input_shapes=None)
+            assert check, 'assert check failed'
+            onnx.save(model_onnx, model_path)
+
+        print('Onnx model save as {}'.format(model_path))
+
     def get_map_txt(self, image_id, image, class_names, map_out_path):
         f = open(os.path.join(map_out_path, "detection-results/"+image_id+".txt"),"w") 
         #---------------------------------------------------#
