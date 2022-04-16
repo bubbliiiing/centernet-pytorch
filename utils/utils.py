@@ -48,3 +48,19 @@ def preprocess_input(image):
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
+
+def download_weights(backbone, model_dir="./model_data"):
+    import os
+    from torch.hub import load_state_dict_from_url
+    
+    if backbone == "hourglass":
+        raise ValueError("HourglassNet has no pretrained model")
+    
+    download_urls = {
+        'resnet50'      : 'https://s3.amazonaws.com/pytorch/models/resnet50-19c8e357.pth',
+    }
+    url = download_urls[backbone]
+    
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+    load_state_dict_from_url(url, model_dir)

@@ -2,6 +2,7 @@ import math
 
 import cv2
 import numpy as np
+import torch
 from PIL import Image
 from torch.utils.data.dataset import Dataset
 
@@ -251,10 +252,10 @@ def centernet_dataset_collate(batch):
         batch_regs.append(batch_reg)
         batch_reg_masks.append(batch_reg_mask)
 
-    imgs = np.array(imgs)
-    batch_hms = np.array(batch_hms)
-    batch_whs = np.array(batch_whs)
-    batch_regs = np.array(batch_regs)
-    batch_reg_masks = np.array(batch_reg_masks)
+    imgs            = torch.from_numpy(np.array(imgs)).type(torch.FloatTensor)
+    batch_hms       = torch.from_numpy(np.array(batch_hms)).type(torch.FloatTensor)
+    batch_whs       = torch.from_numpy(np.array(batch_whs)).type(torch.FloatTensor)
+    batch_regs      = torch.from_numpy(np.array(batch_regs)).type(torch.FloatTensor)
+    batch_reg_masks = torch.from_numpy(np.array(batch_reg_masks)).type(torch.FloatTensor)
     return imgs, batch_hms, batch_whs, batch_regs, batch_reg_masks
 
