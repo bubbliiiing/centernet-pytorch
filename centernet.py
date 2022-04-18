@@ -347,7 +347,7 @@ class CenterNet(object):
         plt.axis('off')
         mask        = np.zeros((image.size[1], image.size[0]))
         score       = np.max(outputs[0][0].permute(1, 2, 0).cpu().numpy(), -1)
-        score       = cv2.resize(score, (image.size[1], image.size[0]))
+        score       = cv2.resize(score, (image.size[0], image.size[1]))
         normed_score    = (score * 255).astype('uint8')
         mask            = np.maximum(mask, normed_score)
         
