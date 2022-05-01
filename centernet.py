@@ -8,7 +8,8 @@ import torch.backends.cudnn as cudnn
 from PIL import ImageDraw, ImageFont
 
 from nets.centernet import CenterNet_HourglassNet, CenterNet_Resnet50
-from utils.utils import cvtColor, get_classes, preprocess_input, resize_image
+from utils.utils import (cvtColor, get_classes, preprocess_input, resize_image,
+                         show_config)
 from utils.utils_bbox import decode_bbox, postprocess
 
 
@@ -77,6 +78,7 @@ class CenterNet(object):
     #---------------------------------------------------#
     def __init__(self, **kwargs):
         self.__dict__.update(self._defaults)
+        show_config(**self._defaults)
         for name, value in kwargs.items():
             setattr(self, name, value)
         #---------------------------------------------------#
@@ -317,6 +319,7 @@ class CenterNet(object):
     def detect_heatmap(self, image, heatmap_save_path):
         import cv2
         import matplotlib.pyplot as plt
+
         #---------------------------------------------------------#
         #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
         #   代码仅仅支持RGB图像的预测，所有其它类型的图像都会转化成RGB

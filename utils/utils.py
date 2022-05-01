@@ -39,15 +39,24 @@ def get_classes(classes_path):
     class_names = [c.strip() for c in class_names]
     return class_names, len(class_names)
 
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
+
 def preprocess_input(image):
     image   = np.array(image,dtype = np.float32)[:, :, ::-1]
     mean    = [0.40789655, 0.44719303, 0.47026116]
     std     = [0.2886383, 0.27408165, 0.27809834]
     return (image / 255. - mean) / std
 
-def get_lr(optimizer):
-    for param_group in optimizer.param_groups:
-        return param_group['lr']
+def show_config(**kwargs):
+    print('Configurations:')
+    print('-' * 70)
+    print('|%25s | %40s|' % ('keys', 'values'))
+    print('-' * 70)
+    for key, value in kwargs.items():
+        print('|%25s | %40s|' % (str(key), str(value)))
+    print('-' * 70)
 
 def download_weights(backbone, model_dir="./model_data"):
     import os
