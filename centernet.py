@@ -78,7 +78,6 @@ class CenterNet(object):
     #---------------------------------------------------#
     def __init__(self, **kwargs):
         self.__dict__.update(self._defaults)
-        show_config(**self._defaults)
         for name, value in kwargs.items():
             setattr(self, name, value)
         #---------------------------------------------------#
@@ -94,6 +93,8 @@ class CenterNet(object):
         self.colors = list(map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)), self.colors))
 
         self.generate()
+        
+        show_config(**self._defaults)
 
     #---------------------------------------------------#
     #   载入模型
