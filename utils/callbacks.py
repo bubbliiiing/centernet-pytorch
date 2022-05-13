@@ -80,7 +80,7 @@ class LossHistory():
 
 class EvalCallback():
     def __init__(self, net, backbone, input_shape, class_names, num_classes, val_lines, log_dir, cuda, \
-            map_out_path=".temp_map_out", max_boxes=100, confidence=0.05, nms_iou=0.5, letterbox_image=True, MINOVERLAP=0.5, eval_flag=True, period=1):
+            map_out_path=".temp_map_out", max_boxes=100, confidence=0.05, nms=True, nms_iou=0.5, letterbox_image=True, MINOVERLAP=0.5, eval_flag=True, period=1):
         super(EvalCallback, self).__init__()
         
         self.net                = net
@@ -94,6 +94,7 @@ class EvalCallback():
         self.map_out_path       = map_out_path
         self.max_boxes          = max_boxes
         self.confidence         = confidence
+        self.nms                = nms
         self.nms_iou            = nms_iou
         self.letterbox_image    = letterbox_image
         self.MINOVERLAP         = MINOVERLAP
